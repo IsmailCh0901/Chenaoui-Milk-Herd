@@ -1,0 +1,24 @@
+<li>
+  {% if node %}
+    <div class="node">
+      {% if node.id %}
+        <a class="text-brand hover:underline" href="{% url 'animal_detail' node.id %}">{{ node.ear_tag }}</a>
+        {% if node.name %}<span class="ml-1 text-gray-500">— {{ node.name }}</span>{% endif %}
+      {% else %}
+        —
+      {% endif %}
+      {% if node.share and level > 0 %}
+        <div class="small">{{ node.share }}%</div>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="node">—</div>
+  {% endif %}
+
+  {% if level|add:1 < pedigree_depth %}
+    <ul>
+      <li>{% include "herdapp/_pedigree_node.html" with node=node.sire level=level|add:1 pedigree_depth=pedigree_depth %}</li>
+      <li>{% include "herdapp/_pedigree_node.html" with node=node.dam  level=level|add:1 pedigree_depth=pedigree_depth %}</li>
+    </ul>
+  {% endif %}
+</li>

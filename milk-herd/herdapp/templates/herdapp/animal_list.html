@@ -1,0 +1,350 @@
+{% extends "herdapp/base.html" %}
+{% block title %}Animals · ELEVAGE LAITIER CHENAOUI{% endblock %}
+
+{% block content %}
+  <!-- Chart helpers (must be inside the block so they render) -->
+  <style>
+    /* Make canvases fill the fixed-height wrapper and avoid CSS scaling blur */
+    .chart-card canvas {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
+  </style>
+
+  <!-- Hero -->
+  <div class="rounded-2xl border border-gray-200/70 dark:border-white/10 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 p-6 mb-6 shadow-soft">
+    <h1 class="text-3xl font-bold flex items-center gap-3">
+      <span>Animals</span>
+      <span class="text-xs font-semibold px-2 py-1 rounded-md bg-blue-600/10 text-blue-700 dark:text-blue-300 border border-blue-600/20">v1</span>
+    </h1>
+    <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">Manage pedigree, siblings and milk records.</p>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="bg-white dark:bg-white/5 rounded-xl border border-gray-200/70 dark:border-white/10 p-5 shadow-soft flex items-center gap-4">
+      <span class="text-2xl">🐄</span>
+      <div>
+        <div class="text-xs text-gray-500 dark:text-gray-400">Total</div>
+        <div class="mt-1 text-2xl font-semibold">{{ stats.total }}</div>
+      </div>
+    </div>
+    <div class="bg-white dark:bg-white/5 rounded-xl border border-gray-200/70 dark:border-white/10 p-5 shadow-soft flex items-center gap-4">
+      <span class="text-2xl">♀️</span>
+      <div>
+        <div class="text-xs text-gray-500 dark:text-gray-400">Females</div>
+        <div class="mt-1 text-2xl font-semibold">{{ stats.females }}</div>
+      </div>
+    </div>
+    <div class="bg-white dark:bg-white/5 rounded-xl border border-gray-200/70 dark:border-white/10 p-5 shadow-soft flex items-center gap-4">
+      <span class="text-2xl">♂️</span>
+      <div>
+        <div class="text-xs text-gray-500 dark:text-gray-400">Males</div>
+        <div class="mt-1 text-2xl font-semibold">{{ stats.males }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trends (charts) -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+    <!-- Milk -->
+    <div class="bg-white dark:bg-white/5 rounded-xl border border-gray-200/70 dark:border-white/10 p-5 shadow-soft chart-card">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold">Milk (last 7 days)</h3>
+      </div>
+      <div class="h-56">
+        <canvas id="milk7"></canvas>
+      </div>
+    </div>
+
+    <!-- Sex ratio -->
+    <div class="bg-white dark:bg-white/5 rounded-xl border border-gray-200/70 dark:border-white/10 p-5 shadow-soft chart-card">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold">Sex ratio</h3>
+      </div>
+      <div class="h-56">
+        <canvas id="sexChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Top breeds -->
+    <div class="bg-white dark:bg-white/5 rounded-xl border border-gray-200/70 dark:border-white/10 p-5 shadow-soft chart-card">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold">Top breeds</h3>
+      </div>
+      <div class="h-56">
+        <canvas id="breedChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="bg-white dark:bg-white/5 rounded-xl border border-gray-200/70 dark:border-white/10 p-4 mb-4 shadow-soft">
+    <form method="get" class="grid grid-cols-1 sm:grid-cols-5 gap-3 items-end">
+      <div class="sm:col-span-2">
+        <label class="block text-sm text-gray-600 dark:text-gray-300 mb-1">Search</label>
+        <input name="q" value="{{ q }}" placeholder="Search ear tag, name, breed"
+               class="w-full rounded-lg border-gray-300 dark:border-white/20 bg-white dark:bg-white/5 focus:border-brand focus:ring-brand" />
+      </div>
+
+      <div>
+        <label class="block text-sm text-gray-600 dark:text-gray-300 mb-1">Sex</label>
+        <select name="sex" class="w-full rounded-lg border-gray-300 dark:border-white/20 bg-white dark:bg-white/5 focus:border-brand focus:ring-brand">
+          <option value="" {% if not sex %}selected{% endif %}>All</option>
+          <option value="F" {% if sex == "F" %}selected{% endif %}>Female</option>
+          <option value="M" {% if sex == "M" %}selected{% endif %}>Male</option>
+          <option value="U" {% if sex == "U" %}selected{% endif %}>Unknown</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-sm text-gray-600 dark:text-gray-300 mb-1">Sort by</label>
+        <select name="order" class="w-full rounded-lg border-gray-300 dark:border-white/20 bg-white dark:bg-white/5 focus:border-brand focus:ring-brand">
+          <option value="ear_tag" {% if order == "ear_tag" %}selected{% endif %}>Ear tag</option>
+          <option value="name" {% if order == "name" %}selected{% endif %}>Name</option>
+          <option value="breed" {% if order == "breed" %}selected{% endif %}>Breed</option>
+          <option value="date_of_birth" {% if order == "date_of_birth" %}selected{% endif %}>Oldest first</option>
+          <option value="-date_of_birth" {% if order == "-date_of_birth" %}selected{% endif %}>Newest first</option>
+        </select>
+      </div>
+
+      <div class="flex flex-wrap gap-2 sm:justify-end">
+        <input type="hidden" name="view" value="{{ view_mode }}">
+        <button class="px-4 py-2 rounded-lg bg-brand text-white hover:opacity-90">Apply</button>
+        <a href="{% url 'animal_list' %}" class="px-4 py-2 rounded-lg border border-gray-300 dark:border-white/20">Reset</a>
+        <a href="/admin/herdapp/animal/add/" class="px-4 py-2 rounded-lg border border-gray-300 dark:border-white/20">+ Add animal</a>
+      </div>
+
+      <!-- View toggle -->
+      <div class="sm:col-span-5 flex items-center gap-2 mt-2">
+        <a href="?q={{ q }}&sex={{ sex }}&order={{ order }}&view=table"
+           class="px-3 py-1.5 rounded-lg border text-sm {% if view_mode == 'table' %}bg-gray-100 dark:bg-white/10{% else %}hover:bg-gray-50 dark:hover:bg-white/10{% endif %}">
+          Table view
+        </a>
+        <a href="?q={{ q }}&sex={{ sex }}&order={{ order }}&view=cards"
+           class="px-3 py-1.5 rounded-lg border text-sm {% if view_mode == 'cards' %}bg-gray-100 dark:bg-white/10{% else %}hover:bg-gray-50 dark:hover:bg-white/10{% endif %}">
+          Cards view
+        </a>
+      </div>
+    </form>
+  </div>
+
+  {% if view_mode == 'cards' %}
+    <!-- Cards Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      {% for a in animals %}
+      <div class="bg-white dark:bg-white/5 rounded-2xl border border-gray-200/70 dark:border-white/10 p-5 shadow-soft hover:shadow transition">
+        <div class="flex items-start justify-between">
+          <a href="{% url 'animal_detail' a.id %}" class="text-lg font-semibold text-brand hover:underline">{{ a.ear_tag }}</a>
+          {% if a.sex == 'F' %}
+            <span class="px-2 py-1 text-xs rounded-full bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-200">Female</span>
+          {% elif a.sex == 'M' %}
+            <span class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200">Male</span>
+          {% else %}
+            <span class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-700 dark:bg-white/10 dark:text-gray-200">Unknown</span>
+          {% endif %}
+        </div>
+        <div class="mt-1 text-sm text-gray-600 dark:text-gray-300">{{ a.name|default:"—" }}</div>
+
+        <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <div class="text-gray-500 dark:text-gray-400">Breed</div>
+            <div class="font-medium">{{ a.breed|default:"—" }}</div>
+          </div>
+          <div>
+            <div class="text-gray-500 dark:text-gray-400">DOB</div>
+            <div class="font-medium">{{ a.date_of_birth|default:"—" }}</div>
+          </div>
+          <div>
+            <div class="text-gray-500 dark:text-gray-400">Sire</div>
+            <div class="font-medium">
+              {% if a.sire %}
+                <a class="text-brand hover:underline" href="{% url 'animal_detail' a.sire.id %}">{{ a.sire.ear_tag }}</a>
+                {% if a.sire.name %}<span class="ml-1 text-gray-400 dark:text-gray-400">— {{ a.sire.name }}</span>{% endif %}
+              {% else %}—{% endif %}
+            </div>
+          </div>
+          <div>
+            <div class="text-gray-500 dark:text-gray-400">Dam</div>
+            <div class="font-medium">
+              {% if a.dam %}
+                <a class="text-brand hover:underline" href="{% url 'animal_detail' a.dam.id %}">{{ a.dam.ear_tag }}</a>
+                {% if a.dam.name %}<span class="ml-1 text-gray-400 dark:text-gray-400">— {{ a.dam.name }}</span>{% endif %}
+              {% else %}—{% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-5 text-right">
+          <a href="{% url 'animal_detail' a.id %}" class="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-white/20 hover:bg-gray-50 dark:hover:bg-white/10 text-sm">View details</a>
+        </div>
+      </div>
+      {% empty %}
+      <div class="col-span-full text-center text-gray-500 dark:text-gray-400 py-10">No animals found.</div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <!-- Table -->
+    <div class="bg-white dark:bg-white/5 rounded-xl border border-gray-200/70 dark:border-white/10 overflow-hidden shadow-soft">
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-white/70 dark:bg-white/5 backdrop-blur border-b border-gray-200/70 dark:border-white/10 text-gray-600 dark:text-gray-300">
+            <tr>
+              <th class="px-4 py-3 text-left">Ear tag</th>
+              <th class="px-4 py-3 text-left">Name</th>
+              <th class="px-4 py-3 text-left">Sex</th>
+              <th class="px-4 py-3 text-left">Breed</th>
+              <th class="px-4 py-3 text-left">DOB</th>
+              <th class="px-4 py-3 text-left">Sire</th>
+              <th class="px-4 py-3 text-left">Dam</th>
+              <th class="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200/70 dark:divide-white/10">
+            {% for a in animals %}
+            <tr class="hover:bg-gray-50 dark:hover:bg-white/10 transition">
+              <td class="px-4 py-3"><a class="text-brand hover:underline" href="{% url 'animal_detail' a.id %}">{{ a.ear_tag }}</a></td>
+              <td class="px-4 py-3">{{ a.name }}</td>
+              <td class="px-4 py-3">
+                {% if a.sex == 'F' %}
+                  <span class="inline-flex items-center px-2 py-1 rounded-full text-xs bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-200">Female</span>
+                {% elif a.sex == 'M' %}
+                  <span class="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200">Male</span>
+                {% else %}
+                  <span class="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700 dark:bg-white/10 dark:text-gray-200">Unknown</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-3">{{ a.breed }}</td>
+              <td class="px-4 py-3">{{ a.date_of_birth|default:"—" }}</td>
+
+              <!-- Sire: ID — Name -->
+              <td class="px-4 py-3">
+                {% if a.sire %}
+                  <a class="text-brand hover:underline" href="{% url 'animal_detail' a.sire.id %}">{{ a.sire.ear_tag }}</a>
+                  {% if a.sire.name %}<span class="ml-1 text-gray-500 dark:text-gray-400">— {{ a.sire.name }}</span>{% endif %}
+                {% else %}—{% endif %}
+              </td>
+
+              <!-- Dam: ID — Name -->
+              <td class="px-4 py-3">
+                {% if a.dam %}
+                  <a class="text-brand hover:underline" href="{% url 'animal_detail' a.dam.id %}">{{ a.dam.ear_tag }}</a>
+                  {% if a.dam.name %}<span class="ml-1 text-gray-500 dark:text-gray-400">— {{ a.dam.name }}</span>{% endif %}
+                {% else %}—{% endif %}
+              </td>
+
+              <td class="px-4 py-3 text-right">
+                <a href="{% url 'animal_detail' a.id %}" class="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-white/20 hover:bg-gray-50 dark:hover:bg-white/10">View</a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="8" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">No animals found.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Pagination -->
+  {% if page_obj.has_other_pages %}
+  <div class="mt-6 flex items-center justify-between text-sm">
+    <div class="text-gray-600 dark:text-gray-300">
+      Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+    </div>
+    <div class="flex gap-2">
+      {% if page_obj.has_previous %}
+        <a class="px-3 py-1.5 rounded-lg border hover:bg-gray-50 dark:border-white/20 dark:hover:bg-white/10"
+           href="?q={{ q }}&sex={{ sex }}&order={{ order }}&view={{ view_mode }}&page={{ page_obj.previous_page_number }}">Previous</a>
+      {% else %}
+        <span class="px-3 py-1.5 rounded-lg border opacity-50 cursor-not-allowed">Previous</span>
+      {% endif %}
+      {% if page_obj.has_next %}
+        <a class="px-3 py-1.5 rounded-lg border hover:bg-gray-50 dark:border-white/20 dark:hover:bg-white/10"
+           href="?q={{ q }}&sex={{ sex }}&order={{ order }}&view={{ view_mode }}&page={{ page_obj.next_page_number }}">Next</a>
+      {% else %}
+        <span class="px-3 py-1.5 rounded-lg border opacity-50 cursor-not-allowed">Next</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+<!-- Charts -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const isDark = document.documentElement.classList.contains('dark');
+  const grid = isDark ? 'rgba(255,255,255,.18)' : 'rgba(0,0,0,.08)';
+  const tick = isDark ? 'rgba(255,255,255,.82)' : 'rgba(17,24,39,.75)';
+  const blue = isDark ? '#60a5fa' : '#2563eb';
+  const pink = isDark ? '#fb7185' : '#ef4444';
+  const amber = isDark ? '#fbbf24' : '#f59e0b';
+
+  // Milk (line)
+  new Chart(document.getElementById('milk7').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: {{ milk_labels|safe }},
+      datasets: [{
+        label: 'Liters',
+        data: {{ milk_series|safe }},
+        borderColor: blue,
+        backgroundColor: 'rgba(37,99,235,.08)',
+        borderWidth: 2.5,
+        pointRadius: 3,
+        pointHoverRadius: 4,
+        tension: 0.25,
+        fill: false
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: grid }, ticks: { color: tick } },
+        y: { grid: { color: grid }, ticks: { color: tick }, beginAtZero: true }
+      }
+    }
+  });
+
+  // Sex ratio (doughnut)
+  new Chart(document.getElementById('sexChart').getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Female','Male','Unknown'],
+      datasets: [{
+        data: {{ sex_series|safe }},
+        backgroundColor: [pink, blue, amber],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      cutout: '58%',
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 14, color: tick } } }
+    }
+  });
+
+  // Top breeds (bar)
+  new Chart(document.getElementById('breedChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: {{ breed_labels|safe }},
+      datasets: [{
+        data: {{ breed_series|safe }},
+        backgroundColor: isDark ? 'rgba(96,165,250,.55)' : 'rgba(37,99,235,.35)',
+        borderColor: blue,
+        borderWidth: 1.5,
+        borderRadius: 5,
+        maxBarThickness: 28
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: tick } },
+        y: { grid: { color: grid }, ticks: { color: tick, precision: 0 }, beginAtZero: true }
+      }
+    }
+  });
+</script>
+
+{% endblock %}

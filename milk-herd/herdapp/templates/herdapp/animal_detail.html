@@ -1,0 +1,218 @@
+{% extends "herdapp/base.html" %}
+{% block title %}{{ animal.display_name }} · ELEVAGE CHENAOUI{% endblock %}
+
+{% block content %}
+  <p class="mb-4">
+    <a class="text-brand hover:underline" href="/">← Back to list</a> ·
+    <a class="text-brand hover:underline" href="/admin/herdapp/animal/{{ animal.id }}/change/">Edit in admin</a>
+  </p>
+
+  <h1 class="text-3xl font-bold mb-2">{{ animal.display_name }}</h1>
+
+  <!-- Row 1: Animal details + Children -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <!-- Animal details (summary + sire/dam) -->
+    <div class="bg-white dark:bg-white/5 rounded-xl border border-gray-200/70 dark:border-white/10 p-5">
+      <h2 class="text-xl font-semibold mb-3">Animal details</h2>
+
+      <table class="w-full text-sm">
+        <tbody>
+          <tr>
+            <th class="text-left font-medium text-gray-500 dark:text-gray-400 pr-4 py-2">Sex</th>
+            <td class="py-2">{{ animal.get_sex_display|default:"—" }}</td>
+          </tr>
+          <tr>
+            <th class="text-left font-medium text-gray-500 dark:text-gray-400 pr-4 py-2">Breed</th>
+            <td class="py-2">{{ animal.breed|default:"—" }}</td>
+          </tr>
+          <tr>
+            <th class="text-left font-medium text-gray-500 dark:text-gray-400 pr-4 py-2">DOB</th>
+            <td class="py-2">{{ animal.date_of_birth|default:"—" }}</td>
+          </tr>
+          <tr>
+            <th class="text-left font-medium text-gray-500 dark:text-gray-400 pr-4 py-2">Age (days)</th>
+            <td class="py-2">{{ animal.age_days|default:"—" }}</td>
+          </tr>
+          <tr>
+            <th class="text-left font-medium text-gray-500 dark:text-gray-400 pr-4 py-2">Alive</th>
+            <td class="py-2">{{ animal.is_alive }}</td>
+          </tr>
+
+          <tr><td colspan="2" class="py-2"></td></tr>
+
+          <tr>
+            <th class="text-left font-medium text-gray-500 dark:text-gray-400 pr-4 py-2">Sire</th>
+            <td class="py-2">
+              {% if animal.sire %}
+                <a class="text-brand hover:underline" href="{% url 'animal_detail' animal.sire.id %}">{{ animal.sire.ear_tag }}</a>
+                {% if animal.sire.name %}<span class="ml-1 text-gray-500">— {{ animal.sire.name }}</span>{% endif %}
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          <tr>
+            <th class="text-left font-medium text-gray-500 dark:text-gray-400 pr-4 py-2">Dam</th>
+            <td class="py-2">
+              {% if animal.dam %}
+                <a class="text-brand hover:underline" href="{% url 'animal_detail' animal.dam.id %}">{{ animal.dam.ear_tag }}</a>
+                {% if animal.dam.name %}<span class="ml-1 text-gray-500">— {{ animal.dam.name }}</span>{% endif %}
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Children -->
+    <div class="bg-white dark:bg-white/5 rounded-xl border border-gray-200/70 dark:border-white/10 p-5">
+      <h2 class="text-xl font-semibold mb-3">Children</h2>
+      <table class="w-full text-sm">
+        <thead class="text-gray-500 dark:text-gray-400">
+          <tr>
+            <th class="text-left py-1">Ear tag</th>
+            <th class="text-left py-1">Name</th>
+            <th class="text-left py-1">Year</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in children %}
+            <tr>
+              <td class="py-1">
+                <a class="text-brand hover:underline" href="{% url 'animal_detail' c.id %}">{{ c.ear_tag }}</a>
+              </td>
+              <td class="py-1">{{ c.name|default:"—" }}</td>
+              <td class="py-1">{% if c.date_of_birth %}{{ c.date_of_birth|date:"Y" }}{% else %}—{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3" class="py-1">—</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>  {# ← This closes the Row-1 grid (ADDED) #}
+
+  <!-- Row 2: Pedigree (FULL WIDTH) -->
+  <div class="bg-white dark:bg-white/5 rounded-xl border border-gray-200/70 dark:border-white/10 p-5 mb-8">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-xl font-semibold">Pedigree</h2>
+      <form method="get" class="flex items-center gap-2 text-sm">
+        <label for="depth" class="text-gray-600 dark:text-gray-300">Level</label>
+        <input id="depth" name="depth" type="number" min="1" max="6" value="{{ pedigree_depth }}"
+               class="w-20 rounded-md border-gray-300 dark:border-white/20 bg-white dark:bg-white/5">
+        <button class="px-3 py-1.5 rounded-md border border-gray-300 dark:border-white/20 hover:bg-gray-50 dark:hover:bg-white/10">OK</button>
+      </form>
+    </div>
+
+    <div class="overflow-x-auto -mx-2 px-2">
+      <svg id="pedigreeSvg" class="min-w-full"></svg>
+    </div>
+
+    <style>
+      .pedigree-text      { font: 16px/1.2 Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; fill: currentColor; }
+      .pedigree-subtext   { font: 12px/1.2 Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; fill: #6b7280; }
+      .pedigree-line      { stroke: #6f4a1b; stroke-width: 2; }
+      .dark .pedigree-line{ stroke: #c7a372; }
+    </style>
+
+    {{ pedigree|json_script:"pedigree-data" }}
+
+    <script>
+      (function () {
+        const data  = JSON.parse(document.getElementById('pedigree-data').textContent || 'null');
+        const depth = {{ pedigree_depth|default:3 }};
+
+        const NS = 'http://www.w3.org/2000/svg';
+        const svg = document.getElementById('pedigreeSvg');
+        svg.innerHTML = '';
+
+        const colW = 360, rowH = 70, padX = 16, padY = 24;
+        const childArm = 120, textDy = 16, labelRightMargin = 12;
+
+        function line(x1,y1,x2,y2){
+          const l = document.createElementNS(NS,'line');
+          l.setAttribute('x1',x1); l.setAttribute('y1',y1);
+          l.setAttribute('x2',x2); l.setAttribute('y2',y2);
+          l.setAttribute('class','pedigree-line');
+          svg.appendChild(l);
+        }
+        function label(x,y,node){
+          const main = `${node && node.ear_tag ? node.ear_tag : '—'}${node && node.name ? ' — ' + node.name : ''}`;
+          const t = document.createElementNS(NS,'text');
+          t.setAttribute('x',x); t.setAttribute('y',y);
+          t.setAttribute('class','pedigree-text');
+          t.textContent = main;
+          svg.appendChild(t);
+          let right = x + t.getBBox().width;
+          if (node && node.share != null && node.share < 100) {
+            const s = document.createElementNS(NS,'text');
+            s.setAttribute('x',x);
+            s.setAttribute('y', y + textDy);
+            s.setAttribute('class','pedigree-subtext');
+            s.textContent = `(${Number(node.share).toFixed(1)}%)`;
+            svg.appendChild(s);
+            right = Math.max(right, x + s.getBBox().width);
+          }
+          return right;
+        }
+        function leafCount(n, col){
+          if (!n || col >= depth-1 || (!n.sire && !n.dam)) return 1;
+          return leafCount(n.sire, col+1) + leafCount(n.dam, col+1);
+        }
+        const leaves = leafCount(data, 0);
+        const width  = Math.max(1, depth) * colW + padX * 2;
+        const height = Math.max(1, leaves) * rowH + padY * 2;
+        svg.setAttribute('width', width);
+        svg.setAttribute('height', height);
+        svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+
+        let rowCursor = 0;
+        function draw(node, col){
+          const x = padX + col * colW;
+          let y;
+          const canExpand = node && (node.sire || node.dam) && (col < depth - 1);
+
+          if (canExpand) {
+            const ySire = draw(node.sire || null, col + 1);
+            const yDam  = draw(node.dam  || null, col + 1);
+            y = (ySire + yDam) / 2;
+
+            const right = label(x, y, node || null);
+            let startX = right + labelRightMargin;
+            let splitX = x + childArm;
+            if (startX >= splitX) splitX = startX + 8;
+
+            line(startX, y, splitX, y);
+            line(splitX, ySire, splitX, yDam);
+            const parentLeft = padX + (col + 1) * colW - 8;
+            line(splitX, ySire, parentLeft, ySire);
+            line(splitX, yDam , parentLeft, yDam );
+          } else {
+            y = padY + rowCursor * rowH;
+            rowCursor++;
+            label(x, y, node || null);
+          }
+          return y;
+        }
+        draw(data, 0);
+      })();
+    </script>
+  </div>
+
+  {% if animal.sex == 'F' %}
+    <!-- Row 3: Milk chart -->
+    <h2 class="text-xl font-semibold mb-3">Milk yield</h2>
+    <canvas id="milkChart" height="120"></canvas>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+      const milk = {{ milk|safe }};
+      const labels = milk.map(x => x.date);
+      const data = milk.map(x => x.liters);
+      new Chart(document.getElementById('milkChart').getContext('2d'), {
+        type: 'line',
+        data: { labels, datasets: [{ label: 'Liters', data, tension: 0.2 }] },
+        options: { scales: { y: { beginAtZero: true } } }
+      });
+    </script>
+  {% endif %}
+
+{% endblock %}
